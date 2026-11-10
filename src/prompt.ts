@@ -140,8 +140,9 @@ export function projectMessage(message: Message): Message {
   } catch { return message; }
 }
 
-/** 摘要器只整理用户目标、答案和工具事实，不把旧思考正文再次放进摘要输入。 */
-export function projectSummaryMessage(message: Message): Message {
+/** 摘要只接收用户原文、答案和工具事实，排除程序状态通知、冻结快照和旧思考。 */
+export function projectSummaryMessage(message: Message): Message | null {
+  if (message.role === "user") return message.prompt?.kind === "update" ? null : { role: "user", content: message.content };
   const projected = projectMessage(message);
   return projected.role === "assistant" ? { role: "assistant", content: projected.content, toolCalls: projected.toolCalls } : projected;
 }

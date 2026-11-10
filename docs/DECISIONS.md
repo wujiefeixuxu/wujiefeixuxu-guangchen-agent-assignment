@@ -11,6 +11,7 @@
 | 状态没有提供给模型 | 用户输入附冻结的运行状态，工具批次结束后追加一条状态更新 | `test/prompt.test.ts` |
 | 动态内容破坏前缀稳定性 | 运行状态和摘要不反复拼进开头；长期偏好和索引按用户要求在一轮开始时进入 system 并冻结 | `test/prompt.test.ts`、`test/memory.test.ts` |
 | 长历史超出应用阈值 | 按提供商实际 token 计数压缩完整旧用户轮次；摘要最多4000字符，原始SQLite历史保留，当前网页正文不截断 | `test/context.test.ts`、`scripts/context-smoke.ts` |
+| 摘要混入过期指令和旧运行状态 | 摘要输入排除程序快照、状态通知与旧思考；提示词约定四节事实摘要，区分最终变更、不确定性与未完成事项。兼容旧文本，下次压缩时合并，不额外调用模型迁移 | `test/context.test.ts`、`test/prompt.test.ts`；用户反馈新版摘要手工测试结果良好 |
 | 思考模式工具循环丢字段 | 分别解析思考、工具调用与答案；保留历史思考并完整回传，SQLite恢复后仍保留 | `test/thinking.test.ts`、`test/deepseek.test.ts` |
 | 把模型思考误当最终回答 | 只有思考没有答案或工具调用时明确失败；输出截断也不能记为完成 | `test/deepseek.test.ts` |
 | 真实输入 token 与字符数混淆 | 计数接口与生成接口 usage 分开记录，计数请求不消耗20次生成预算 | `test/context.test.ts`、`scripts/memory-smoke.ts` |

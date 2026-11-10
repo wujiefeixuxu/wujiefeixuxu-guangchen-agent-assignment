@@ -14,7 +14,7 @@ import { AgentRuntime } from "../src/runtime.ts";
 import { SessionService } from "../src/session-service.ts";
 import { SqliteStore } from "../src/sqlite-store.ts";
 import { createBuiltinTools } from "../src/tools/builtin.ts";
-import { createRuntimeSnapshot, createRuntimeUpdate, SUMMARY_HEADER } from "../src/prompt.ts";
+import { createRuntimeSnapshot, createRuntimeUpdate, SUMMARY_HEADER, UPDATE_HEADER, withInputSnapshot } from "../src/prompt.ts";
 import type { TodoItem } from "../src/todos.ts";
 import type { AssistantMessage, Message, Model, ModelInput } from "../src/types.ts";
 import { lastConversationMessage, lastToolMessage, latestSnapshot, latestUserText } from "./helpers/messages.ts";
@@ -111,6 +111,70 @@ test("按完整轮次压缩旧工具请求与结果，不删除原始消息或�
   assert.ok(prepared.messages[1]?.content?.includes("工具返回36"));
   assert.equal(prepared.messages.filter((message) => message.role === "tool").length, 0);
   assert.equal(JSON.stringify(history), original);
+});
+
+test("摘要来源移除程序快照和状态通知，保留用户手写标签与配对工具事实，覆盖边界不变", async () => {
+  const rawUser = `${UPDATE_HEADER}这是用户手写的标签，属于原文。请计算12乘3。${"旧资料".repeat(3000)}`;
+  const snapshot = createRuntimeSnapshot({ userId: "A", threadId: "one", runId: "runtime-only-run" }, "running", emptyMetrics(), 20, [{ content: "snapshot-only-todo", status: "pending", error: null }], []);
+  const messages: Message[] = [
+    { role: "system", content: "固定规则" },
+    withInputSnapshot({ role: "user", content: rawUser }, snapshot),
+    { ...calculate(12, 3, "*", "business-calc"), reasoningContent: "private-old-reasoning", usage: { promptTokens: 10, completionTokens: 2, totalTokens: 12 } },
+    { role: "tool", name: "calculator", toolCallId: "business-calc", content: JSON.stringify({ ok: true, result: { value: 36, source: "business-evidence" }, meta: { runId: "runtime-only-run", durationMs: 9 } }) },
+    createRuntimeUpdate(snapshot, ["tools_completed"]), answer("结果36，计算已完成"), { role: "user", content: "继续追问结果" },
+  ];
+  const before = JSON.stringify(messages);
+  const summary = "【已确认事实】\n- 计算12乘3，工具实际返回36。\n【变更与最终结论】\n- 计算已完成，结果36。\n【未确认或未提供】\n无\n【未完成事项】\n无";
+  const manager = new ContextManager({ maxChars: 3000 });
+  let calls = 0;
+  const prepared = await manager.prepare(messages, [], () => null, async (input) => {
+    calls++;
+    assert.deepEqual(input.tools, []);
+    const payload = objectValue(parseJson(input.messages[1]?.content ?? ""), "摘要输入");
+    const source = payload.messages;
+    assert.ok(Array.isArray(source)); assert.equal(source.length, 4);
+    assert.equal(objectValue(source[0], "用户原文").content, rawUser);
+    assert.equal(objectValue(source[0], "用户原文").prompt, undefined);
+    const serialized = JSON.stringify(source);
+    for (const excluded of ["runtime-only-run", "snapshot-only-todo", "private-old-reasoning", "promptTokens", "durationMs"]) assert.equal(serialized.includes(excluded), false, excluded);
+    const tool = objectValue(source[2], "工具结果");
+    assert.equal(tool.toolCallId, "business-calc");
+    assert.deepEqual(parseJson(String(tool.content)), { ok: true, result: { value: 36, source: "business-evidence" } });
+    const instructions = input.messages[0]?.content ?? "";
+    assert.ok(instructions.includes("过期的一次性回复要求"));
+    assert.ok(instructions.includes("旧摘要也要按以下规则重新整理"));
+    return answer(summary);
+  }, () => {});
+  assert.equal(calls, 1);
+  assert.deepEqual(manager.memory, { summary, coveredMessages: 5 });
+  assert.equal(prepared.input.messages.at(-1)?.content, "继续追问结果");
+  assert.equal(JSON.stringify(messages), before);
+});
+
+test("旧文本摘要兼容读取，新批次合并变更后持久化四节摘要并直接复用", async () => {
+  const legacy: ContextMemory = { summary: "旧版自由文本：勘查预算8000元，资料接收已完成。旧快照为running，模型调用0。", coveredMessages: 2 };
+  const saves: ContextMemory[] = [];
+  const manager = new ContextManager({ maxChars: 3000 }, legacy, (memory) => saves.push({ ...memory }));
+  const prior: Message[] = [{ role: "user", content: "初始预算8000元" }, answer("已收到")];
+  await manager.prepare([...prior, { role: "user", content: "普通追问" }], [], () => null, async () => { assert.fail("未超阈值不能为重排版额外调用模型"); }, () => {});
+  assert.deepEqual(manager.memory, legacy); assert.equal(saves.length, 0);
+  const messages: Message[] = [...prior, { role: "user", content: `正式预算改为5000元，替代8000元；取消此前的巡检任务。${"新增资料".repeat(2000)}` }, answer("已更正预算并取消巡检"), { role: "user", content: "现在的预算是多少" }];
+  const before = JSON.stringify(messages);
+  const summary = "【已确认事实】\n- 资料接收已完成。\n【变更与最终结论】\n- 预算最终为5000元，替代8000元；巡检任务已取消。\n【未确认或未提供】\n无\n【未完成事项】\n无";
+  await manager.prepare(messages, [], () => null, async (input) => {
+    const payload = objectValue(parseJson(input.messages[1]?.content ?? ""), "摘要输入");
+    assert.equal(payload.previousSummary, legacy.summary);
+    assert.ok(Array.isArray(payload.messages)); assert.equal(payload.messages.length, 2);
+    assert.ok(JSON.stringify(payload.messages).includes("正式预算改为5000元"));
+    return answer(summary);
+  }, () => {});
+  assert.deepEqual(saves, [{ summary, coveredMessages: 4 }]);
+  const continued = await manager.prepare([...messages, answer("5000元"), { role: "user", content: "继续沿用这个预算" }], [], () => null, async () => { assert.fail("有效摘要应直接复用"); }, () => {});
+  const summaryMessage = continued.input.messages.find((message) => message.role === "user" && message.content.startsWith(SUMMARY_HEADER));
+  assert.ok(summaryMessage?.content?.includes("5000元"));
+  assert.equal(JSON.stringify(continued.input).includes("旧快照为running"), false);
+  assert.equal(saves.length, 1);
+  assert.equal(JSON.stringify(messages), before);
 });
 
 test("摘要按Unicode硬限4000字符，过长时重新生成而不是裁剪正文", async () => {

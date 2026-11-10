@@ -121,7 +121,7 @@ test("工具后触发压缩时合并一条更新，摘要不改 system，程序 
       if (!input.tools.length) {
         summaries++;
         const data = objectValue(parseJson(input.messages[1]?.content ?? ""), "摘要输入");
-        assert.equal(arrayValue(data.messages, "旧消息").length, 5);
+        assert.equal(arrayValue(data.messages, "旧消息").length, 4);
         return reply("上一轮计算1加2得到3，任务已经完成。");
       }
       inputs.push(structuredClone(input));
