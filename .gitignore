@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+dist/
+logs/
+.agent-data/
+artifacts/
+.env
+.env.*
+!.env.example

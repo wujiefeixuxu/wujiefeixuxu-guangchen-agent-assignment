@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#183a31">
+  <meta name="description" content="一个拥有独立会话记忆、深度思考和工具执行能力的本地 Agent 工作台。">
+  <title>Agent 工作台 · 深度思考</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="workspace">
+    <aside class="sidebar" aria-label="会话侧栏">
+      <a class="brand" href="/" aria-label="Agent 工作台"><img src="/favicon.svg" alt=""><span>Agent<span class="brand-sub">工作台</span></span><span class="local-label">LOCAL</span></a>
+      <div class="sidebar-actions"><button id="new-session" class="new-session"><span>＋</span> 新建会话</button><button id="new-window" class="window-button" aria-label="在新窗口创建独立会话" title="新窗口，独立会话">↗</button></div>
+      <div class="sidebar-heading"><span>最近会话</span><span id="session-count">0</span></div>
+      <nav id="sessions" class="session-list" aria-label="历史会话"></nav>
+      <div class="sidebar-footer"><div class="user-avatar" id="user-avatar">A</div><label class="user-switch">本地用户<select id="user-select" aria-label="切换本地用户"><option value="user-A">用户 A</option><option value="user-B">用户 B</option><option value="local-user">本地用户</option></select></label><span class="online-dot" title="数据保存在这台电脑"></span></div>
+    </aside>
+    <main class="chat-panel">
+      <header class="chat-header">
+        <button id="menu-button" class="icon-button mobile-menu" aria-label="打开会话侧栏">☰</button>
+        <div class="chat-heading"><div class="eyebrow">独立记忆 · 自主执行</div><h1 id="session-title">正在载入会话</h1></div>
+        <div class="header-actions"><span id="run-status" class="status-badge idle"><span></span>待运行</span><button id="refresh" class="icon-button" aria-label="刷新当前会话" title="刷新会话">↻</button><button id="inspector-button" class="inspect-button">计划与过程 <span>☷</span></button></div>
+      </header>
+      <div class="conversation-scroll" id="conversation-scroll">
+        <section id="welcome" class="welcome" hidden>
+          <div class="welcome-mark"><img src="/favicon.svg" alt=""></div><div class="welcome-kicker">从一个想法，到一件完成的事</div>
+          <h2>想清楚，再一起做到。</h2><p>把任务交给 Agent。<br>思考、计划与每一步执行，都清楚可见。</p>
+          <div class="welcome-capabilities"><span>✦ 深度思考</span><span>↳ 自主调用工具</span><span>◫ 独立会话记忆</span></div>
+          <div class="suggestion-grid">
+            <button class="suggestion" data-prompt="搜索上海天气示例，读取对应网页，再把明天出门带伞记录为一项等待处理的待办。请注明天气是模拟数据。"><span class="suggestion-icon">☀</span><strong>查天气，记待办</strong><span>搜索模拟天气资料，安排出门准备</span><b>↗</b></button>
+            <button class="suggestion" data-prompt="先用write_todos规划计算12乘3再加10。用calculator分两步计算，按实际进度更新计划，最后说明结果。"><span class="suggestion-icon">⌘</span><strong>拆解任务，逐步完成</strong><span>计算、更新计划，查看完整执行过程</span><b>↗</b></button>
+          </div>
+          <div class="welcome-note"><span class="tiny-dot"></span> 每个窗口都有自己的对话和待办</div>
+        </section>
+        <section id="messages" class="messages" aria-label="聊天记录" aria-live="polite"></section>
+      </div>
+      <div class="composer-area">
+        <div id="run-error" class="run-error" role="alert" hidden></div>
+        <div id="activity" class="activity" hidden><span class="pulse-dot"></span><span id="activity-text">Agent 正在处理任务…</span></div>
+        <form id="composer" class="composer"><label class="sr-only" for="prompt">发送消息</label><textarea id="prompt" rows="3" maxlength="1000000" placeholder="描述一个任务，或接着上次的进度继续…" aria-label="消息内容"></textarea>
+          <div class="composer-toolbar"><div class="model-settings"><span class="model-label"><span class="tiny-dot"></span><span id="model-name">DeepSeek</span></span><span id="thinking-mode" class="thinking-mode">读取思考配置…</span></div><div class="composer-controls"><span class="keyboard-hint">Enter 发送 · Shift + Enter 换行</span><button id="stop" class="stop-button" type="button" hidden><span>■</span> 停止</button><button id="send" class="send-button" type="submit" aria-label="发送消息">↑</button></div></div>
+        </form>
+        <p class="composer-footnote">搜索与网页读取使用模拟资料 <span>·</span> <span id="session-label">独立会话</span></p>
+      </div>
+    </main>
+    <aside class="inspector" aria-label="待办和执行过程">
+      <div class="inspector-header"><div><span class="eyebrow">每一步，都有迹可循</span><h2>任务与过程</h2></div><button id="close-inspector" class="icon-button close-inspector" aria-label="关闭计划与过程">×</button></div>
+      <div class="inspector-tabs" role="tablist"><button id="todo-tab" role="tab" aria-selected="true" aria-controls="todo-panel" class="selected">待办计划 <span id="todo-count">0</span></button><button id="log-tab" role="tab" aria-selected="false" aria-controls="log-panel">执行过程</button><button id="memory-tab" role="tab" aria-selected="false" aria-controls="memory-panel">记忆 <span id="memory-count">0</span></button></div>
+      <section id="todo-panel" role="tabpanel" aria-labelledby="todo-tab" class="todo-panel"><div id="todo-progress" class="todo-progress" hidden><div><span>完成进度</span><strong id="todo-progress-text">0 / 0</strong></div><progress id="progress" value="0" max="1" aria-label="待办完成进度"></progress></div><div id="todos" class="todo-list"></div><div class="inspector-hint">计划会随执行更新，完成的事项会保留。<br>当前窗口与其他会话相互独立。</div></section>
+      <section id="log-panel" role="tabpanel" aria-labelledby="log-tab" class="log-panel" hidden>
+        <label class="run-picker">执行记录<select id="run-picker" aria-label="选择执行记录"></select></label>
+        <div class="metrics"><div><strong id="metric-model">0</strong><span>模型调用</span></div><div><strong id="metric-tool">0</strong><span>工具执行</span></div><div><strong id="metric-error">0</strong><span>拒绝 / 失败</span></div></div>
+        <div class="usage-grid" aria-label="模型实际 token 用量"><div><span>输入 tokens</span><strong id="usage-input">—</strong></div><div><span>输出 tokens</span><strong id="usage-output">—</strong></div><div><span>其中思考</span><strong id="usage-reasoning">—</strong></div><div><span>缓存命中</span><strong id="usage-cache">—</strong></div></div>
+        <h3 class="process-heading">✦ 思考与决策</h3><div id="model-traces" class="model-traces"></div>
+        <h3 class="process-heading">↳ 工具执行</h3><div id="traces" class="trace-list"></div>
+        <details id="raw-log" class="raw-log"><summary>原始请求、结果与关联 ID</summary><pre id="raw-log-content"></pre></details>
+      </section>
+      <section id="memory-panel" role="tabpanel" aria-labelledby="memory-tab" class="memory-panel" hidden>
+        <p id="memory-owner" class="memory-owner"></p>
+        <div class="memory-actions"><button id="memory-new" type="button">＋ 添加记忆</button><button id="memory-preferences" type="button">编辑偏好</button><button id="memory-organize" type="button">整理记忆</button></div>
+        <p class="memory-explanation">只保存明确需要长期记住的信息。偏好正文和 JSON 索引在下一轮输入时加载，当前工具循环的快照保持不变。</p>
+        <section id="memory-editor" class="memory-editor" hidden><h3 id="memory-editor-title">添加记忆</h3>
+          <form id="memory-form"><label>记忆 ID<input id="memory-id" required maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{0,63}" placeholder="例如 agent-project"></label><label>名称<input id="memory-name" required maxlength="100" placeholder="例如 Agent 项目"></label><label>一句话简介<textarea id="memory-summary" required maxlength="240" rows="2" placeholder="供模型判断是否需要读取"></textarea></label><label>完整正文 · Markdown<textarea id="memory-content" required maxlength="20000" rows="7" placeholder="记录已确认的事实、约束或偏好…"></textarea></label>
+          <div class="memory-editor-actions"><button id="memory-save" type="submit">保存记忆</button><button id="memory-cancel" type="button">取消</button><button id="memory-delete" type="button" hidden>删除</button></div></form>
+        </section>
+        <div id="memory-list" class="memory-list"></div>
+        <details class="memory-index"><summary>下一轮 JSON 索引预览</summary><pre id="memory-index-preview"></pre></details>
+        <p class="memory-explanation">时间按北京时间显示为昨天、前天或约几个月前。整理只处理已保存的记录，保留原时间；Agent 的读写会出现在执行日志里。</p>
+      </section>
+      <div class="storage-badge"><span class="tiny-dot"></span>本地保存 <span>SQLite</span></div>
+    </aside>
+  </div>
+  <button id="backdrop" class="backdrop" aria-label="关闭侧栏" hidden></button><div id="toast" class="toast" role="alert" hidden></div>
+</body>
+</html>

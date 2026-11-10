@@ -1,0 +1,31 @@
+{
+  "name": "guangchen-agent-assignment",
+  "version": "0.1.0",
+  "private": true,
+  "description": "光晨智能技术测试：使用Node.js和TypeScript从零实现最小可用Agent Runtime。",
+  "type": "module",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "start:built": "node --env-file-if-exists=.env dist/index.js",
+    "web": "npm run build && node --env-file-if-exists=.env dist/server.js",
+    "web:built": "node --env-file-if-exists=.env dist/server.js",
+    "test": "node --test test/*.test.ts",
+    "smoke:context": "node --env-file-if-exists=.env scripts/context-smoke.ts",
+    "smoke:memory": "node --env-file-if-exists=.env scripts/memory-smoke.ts",
+    "stress:novel": "node --env-file-if-exists=.env scripts/novel-context-stress.ts",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wujiefeixuxu/wujiefeixuxu-guangchen-agent-assignment.git"
+  }
+}
